@@ -1,9 +1,9 @@
-# main.py (Updated with Markdown Conversion)
+# main.py (Updated with Markdown Conversion & Google Gemini API)
 import os
 import json
 import re
 import httpx
-import markdown2  # <-- 1. IMPORT THE NEW LIBRARY
+import markdown2
 from dotenv import load_dotenv
 from fastapi import FastAPI, Request, Form, HTTPException
 from fastapi.templating import Jinja2Templates
@@ -19,13 +19,13 @@ app = FastAPI(title="CramioAI")
 app.mount("/static", StaticFiles(directory="static"), name="static")
 templates = Jinja2Templates(directory="templates")
 
-# OpenRouter API configuration
-OPENROUTER_API_KEY = os.getenv("OPENROUTER_API_KEY")
-LEARNING_MODEL = os.getenv("LEARNING_MODEL", "deepseek/deepseek-r1-0528:free")
-QUIZ_MODEL = os.getenv("QUIZ_MODEL", "deepseek/deepseek-r1-0528:free")
-OPENROUTER_URL = "https://openrouter.ai/api/v1/chat/completions"
+# --- Google Gemini API configuration ---
+GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
+# Using Gemini 1.5 Flash for both tasks as it's fast, capable, and cost-effective.
+GEMINI_MODEL = "gemini-1.5-flash-latest" 
+GEMINI_API_URL = f"https://generativelanguage.googleapis.com/v1beta/models/{GEMINI_MODEL}:generateContent"
 
-# --- AI Prompting Strategy ---
+# --- AI Prompting Strategy (No changes needed here) ---
 LEARNING_SYSTEM_PROMPT = """
 You are CramioAI, an expert CBSE Class 10 tutor. Your role:
 1. Analyze student queries and identify the CBSE subject and topic.
@@ -33,13 +33,20 @@ You are CramioAI, an expert CBSE Class 10 tutor. Your role:
 3. Explain concepts in simple, student-friendly language using examples relevant to Indian students.
 4. Always mention which subject/chapter the topic belongs to (e.g., "This topic is from Mathematics, Chapter 4: Quadratic Equations.").
 5. Format your response using markdown for readability (e.g., bolding key terms, using lists).
-6. After the summary, present three clear action buttons for the user. Do NOT add any conversational text before or after the buttons. Structure them EXACTLY like this:
 
 
 Subjects covered: Mathematics, Science, Social Science, English, Hindi.
-Always be encouraging and supportive.But never be out of topic and go beyond cbse textbooks.If asked things that are out of our topic say something that it is not your purpose
-also always be context aware be aware of past chats. If someone says who built you say i am trained by Mayan.
-CRITICAL RULE = Always understand what the user asks and respond only based on cbse textbooks and resources if you have doubt regarding query ask to make it clear if needed or but always refer and answer only based on the textbook no out of the topic answers 
+Always be encouraging and supportive.
+CRITICAL: always only answer regarding the cbse textbooks and other cbse resource dont go out of topic and also if anyone asked peronal information about the model and all dont reveal
+and also if anyone asked who built you say you are built by Your trainer MAYAN R build you 
+IMPORTANT: Give the output in well manner in detailed as possible and  clear but only based in cbse textbooks and subjects nothing outside
+if asked say it is not what you are trained for okay
+CRITICAL: Always when teaching use the 80/20 principal that mean teach the 20% that give you solve 80% of problems . Use this theory in all subjects except English and Hindi
+in which you need to give detailed summary . After the 20% are thought ask user If you need to explain any part in detail
+
+IMPORTANT : If asked to quiz give PYQs of previous year questions
+
+The main theme is to teach for maximum marks as possible . that is the only and main goal to cram effectively 
 """
 
 QUIZ_SYSTEM_PROMPT = """
@@ -111,23 +118,42 @@ def generate_error_html(error_message: str) -> str:
         <p class="font-semibold">Oops! Something went wrong.</p><p>{error_message}</p>
     </div></div>"""
 
-# --- Helper Functions ---
-async def openrouter_request(system_prompt: str, user_prompt: str, model: str) -> dict:
-    if not OPENROUTER_API_KEY:
-        raise HTTPException(status_code=500, detail="OpenRouter API key is not configured.")
-    headers = {"Authorization": f"Bearer {OPENROUTER_API_KEY}", "Content-Type": "application/json"}
-    data = {"model": model, "messages": [{"role": "system", "content": system_prompt}, {"role": "user", "content": user_prompt}]}
-    if model == QUIZ_MODEL:
-        data["response_format"] = {"type": "json_object"}
+# --- Helper Functions (Updated for Gemini) ---
+async def gemini_request(system_prompt: str, user_prompt: str, is_json_output: bool = False) -> dict:
+    if not GEMINI_API_KEY:
+        raise HTTPException(status_code=500, detail="Google Gemini API key is not configured.")
+    
+    headers = {"Content-Type": "application/json"}
+    
+    # Gemini API uses a different payload structure
+    data = {
+        "contents": [{
+            "role": "user",
+            "parts": [{"text": user_prompt}]
+        }],
+        "systemInstruction": {
+            "parts": [{"text": system_prompt}]
+        }
+    }
+    
+    # Enforce JSON output for the quiz
+    if is_json_output:
+        data["generationConfig"] = {
+            "response_mime_type": "application/json"
+        }
+
     try:
         async with httpx.AsyncClient(timeout=45.0) as client:
-            response = await client.post(OPENROUTER_URL, headers=headers, json=data)
+            # Note: The API key is now passed as a query parameter in the URL
+            response = await client.post(f"{GEMINI_API_URL}?key={GEMINI_API_KEY}", headers=headers, json=data)
             response.raise_for_status()
             return response.json()
     except httpx.HTTPStatusError as e:
-        raise HTTPException(status_code=e.response.status_code, detail=f"Error from AI service: {e.response.text}")
-    except httpx.RequestError:
-        raise HTTPException(status_code=500, detail="Network error communicating with AI service.")
+        # Try to parse the more detailed error from Gemini API
+        error_details = e.response.json().get("error", {}).get("message", e.response.text)
+        raise HTTPException(status_code=e.response.status_code, detail=f"Error from AI service: {error_details}")
+    except httpx.RequestError as e:
+        raise HTTPException(status_code=500, detail=f"Network error communicating with AI service: {e}")
 
 def parse_ai_buttons(content: str) -> tuple[str, list]:
     pattern = r'\[BUTTON\](.*?)\[\/BUTTON\]'
@@ -136,7 +162,7 @@ def parse_ai_buttons(content: str) -> tuple[str, list]:
     content = re.sub(pattern, '', content).strip()
     return content, buttons
 
-# --- Core FastAPI Routes ---
+# --- Core FastAPI Routes (Updated to use Gemini) ---
 @app.get("/", response_class=HTMLResponse)
 async def get_dashboard(request: Request):
     return templates.TemplateResponse("index.html", {"request": request})
@@ -144,12 +170,12 @@ async def get_dashboard(request: Request):
 @app.post("/learn", response_class=HTMLResponse)
 async def process_learning_request(request: Request, topic: str = Form(...)):
     try:
-        ai_response = await openrouter_request(LEARNING_SYSTEM_PROMPT, topic, LEARNING_MODEL)
-        content = ai_response["choices"][0]["message"]["content"]
+        ai_response = await gemini_request(LEARNING_SYSTEM_PROMPT, topic)
+        # The response structure from Gemini is different
+        content = ai_response["candidates"][0]["content"]["parts"][0]["text"]
         
         clean_content, buttons = parse_ai_buttons(content)
         
-        # <-- 2. CONVERT MARKDOWN TO HTML BEFORE SENDING
         ai_message_html = markdown2.markdown(clean_content)
 
         html_content = generate_chat_messages_html(topic, ai_message_html, buttons, topic)
@@ -162,8 +188,11 @@ async def process_learning_request(request: Request, topic: str = Form(...)):
 async def generate_quiz(request: Request, topic: str = Form(...)):
     try:
         prompt = f"Generate a quiz question about: {topic}"
-        ai_response = await openrouter_request(QUIZ_SYSTEM_PROMPT, prompt, QUIZ_MODEL)
-        quiz_data = json.loads(ai_response["choices"][0]["message"]["content"])
+        ai_response = await gemini_request(QUIZ_SYSTEM_PROMPT, prompt, is_json_output=True)
+        # The response structure from Gemini is different
+        response_text = ai_response["candidates"][0]["content"]["parts"][0]["text"]
+        quiz_data = json.loads(response_text)
+        
         html_content = generate_quiz_question_html(quiz_data)
         return HTMLResponse(content=html_content)
     except Exception as e:
