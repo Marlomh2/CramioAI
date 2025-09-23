@@ -21,8 +21,8 @@ templates = Jinja2Templates(directory="templates")
 
 # OpenRouter API configuration
 OPENROUTER_API_KEY = os.getenv("OPENROUTER_API_KEY")
-LEARNING_MODEL = os.getenv("LEARNING_MODEL", "ngtech/deepseek-r1t-chimera:free")
-QUIZ_MODEL = os.getenv("QUIZ_MODEL", "openai/gpt-3.5-turbo")
+LEARNING_MODEL = os.getenv("LEARNING_MODEL", "google/gemini-2.0-flash-exp:free")
+QUIZ_MODEL = os.getenv("QUIZ_MODEL", "google/gemini-2.0-flash-exp:free")
 OPENROUTER_URL = "https://openrouter.ai/api/v1/chat/completions"
 
 # --- AI Prompting Strategy ---
