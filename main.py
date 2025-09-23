@@ -21,7 +21,7 @@ templates = Jinja2Templates(directory="templates")
 
 # OpenRouter API configuration
 OPENROUTER_API_KEY = os.getenv("OPENROUTER_API_KEY")
-LEARNING_MODEL = os.getenv("LEARNING_MODEL", "openai/gpt-4o-mini")
+LEARNING_MODEL = os.getenv("LEARNING_MODEL", "ngtech/deepseek-r1t-chimera:free")
 QUIZ_MODEL = os.getenv("QUIZ_MODEL", "openai/gpt-3.5-turbo")
 OPENROUTER_URL = "https://openrouter.ai/api/v1/chat/completions"
 
@@ -34,9 +34,7 @@ You are CramioAI, an expert CBSE Class 10 tutor. Your role:
 4. Always mention which subject/chapter the topic belongs to (e.g., "This topic is from Mathematics, Chapter 4: Quadratic Equations.").
 5. Format your response using markdown for readability (e.g., bolding key terms, using lists).
 6. After the summary, present three clear action buttons for the user. Do NOT add any conversational text before or after the buttons. Structure them EXACTLY like this:
-[BUTTON]Explain in Detail[/BUTTON]
-[BUTTON]Break it Down[/BUTTON]
-[BUTTON]Quiz Me on This[/BUTTON]
+
 
 Subjects covered: Mathematics, Science, Social Science, English, Hindi.
 Always be encouraging and supportive.But never be out of topic and go beyond cbse textbooks.If asked things that are out of our topic say something that it is not your purpose
