@@ -23,7 +23,7 @@ templates = Jinja2Templates(directory="templates")
 OPENROUTER_API_KEY = os.getenv("OPENROUTER_API_KEY")
 LEARNING_MODEL = os.getenv("LEARNING_MODEL", "deepseek/deepseek-r1-0528:free")
 QUIZ_MODEL = os.getenv("QUIZ_MODEL", "deepseek/deepseek-r1-0528:free")
-OPENROUTER_URL = "https://openrouter.ai/api/v1"
+OPENROUTER_URL = "https://openrouter.ai/api/v1/chat/completions"
 
 # --- AI Prompting Strategy ---
 LEARNING_SYSTEM_PROMPT = """
